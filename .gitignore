@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.env
+
+# PostgreSQL dumps (optional)
+*.sql
+
+# Environment
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Virtual Environment
+venv/
+env/
+
+# VSCode (if you use it)
+.vscode/
+
+# Logs
+*.log

@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from backend.models import create_table
+from .models import create_table
 
 app = FastAPI()
 

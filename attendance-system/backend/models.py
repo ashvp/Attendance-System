@@ -9,7 +9,7 @@ def create_table():
                 id SERIAL PRIMARY KEY,
                 name VARCHAR(255) NOT NULL,
                 email VARCHAR(255) NOT NULL,
-                embedding FLOAT8[] NOT NULL);
+                embedding vector(512) NOT NULL);
                 """)
     
     cur.execute("""

@@ -5,3 +5,5 @@ Background tasks
 Testing
 Stats
 Update User details
+Change attendance retrival from ID to name or mail.. its not possible for coach to remember everyones ID
+also bring up a search mechanism, like done in event-tracking

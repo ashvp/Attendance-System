@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://192.168.0.107:8000'; // Use your WSL IP
+  static const String baseUrl = 'http://192.168.0.105:8000'; // Use your WSL IP
 
   // Multipart request for user registration with image upload
   static Future<http.StreamedResponse> registerUser({

@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from .models import create_table
 from .database import get_connection
 from datetime import datetime
@@ -10,6 +11,20 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
 
 
 app = FastAPI()
+
+origins = [
+    "*",  # Allows all origins
+    "http://localhost:3000" # Allows localhost
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 app.include_router(mark_attendance.router)
 app.include_router(register.router)

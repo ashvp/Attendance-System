@@ -1,75 +1,81 @@
 from fastapi.responses import StreamingResponse
-from fastapi import APIRouter, HTTPException
-from ..database import get_connection
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from sqlalchemy.orm import joinedload
+from ..db.session import get_db
+from ..db.models.user import User
+from ..db.models.attendance import Attendance
+
 import io
 import csv
+from datetime import datetime
 
 router = APIRouter()
 
 @router.get("/api/attendance/export")
-def export_attendance():
-    conn = get_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    
+async def export_attendance(db: AsyncSession = Depends(get_db)):
     try:
-        cur = conn.cursor()
-        cur.execute("SELECT users.name, users.email, attendance.date FROM attendance JOIN users ON attendance.user_id = users.id ORDER BY date DESC")
-        rows = cur.fetchall()
+        stmt = select(Attendance).options(joinedload(Attendance.user)).order_by(Attendance.date.desc())
+        result = await get_db().execute(stmt)
+        rows = result.scalars().all()
 
+        if not rows:
+            raise HTTPException(status_code=404, detail="No attendance records found")
+        
         output = io.StringIO()
         writer = csv.writer(output)
-        writer.writerow(["Name", "Email", "date"])  
-        
+        writer.writerow(["Name", "Email", "Date", "Session"])
+
         for row in rows:
-            writer.writerow(row)
+            writer.writerow([row.user.name, row.user.email, row.date, row.session])
 
-        output.seek(0)  
-
-        return StreamingResponse(output, media_type="text/csv", headers={"Content-Disposition": "attachment; filename=attendance.csv"})
-
+        output.seek(0)
+        return StreamingResponse(
+            output,
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=attendance.csv"}
+        )
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
-    finally:
-        cur.close()
-        conn.close()
 
 @router.get("/api/attendance/user/{user_id}")
-def get_attendance_by_user(user_id: int):
-    conn = get_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-
+async def get_attendance_by_user(user_id: int, db: AsyncSession = Depends(get_db)):
     try:
-        cur = conn.cursor()
-        cur.execute("SELECT date FROM attendance WHERE user_id = %s ORDER BY date DESC", (user_id,))
-        rows = cur.fetchall()
-        return {"user_id": user_id, "records": [r[0] for r in rows]}
+        stmt = select(Attendance).where(Attendance.user_id == user_id).order_by(Attendance.date.desc())
+        result = await get_db().execute(stmt)
+        records = result.scalars().all()
+        if not records:
+            raise HTTPException(status_code=404, detail="No attendance records found for this user")
+
+        return [{"date": record.date, "session": record.session} for record in records]
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        conn.close()
-
 
 @router.get("/api/attendance/filter")
-def filter_attendance(start_date: str, end_date: str):
-    conn = get_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-
+async def filter_attendance(start_date: str, end_date: str):
     try:
-        cur = conn.cursor()
-        cur.execute(
-            "SELECT users.name, users.email, attendance.date FROM attendance JOIN users ON attendance.user_id = users.id WHERE date BETWEEN %s AND %s ORDER BY date DESC",
-            (start_date, end_date)
-        )
-        rows = cur.fetchall()
-        return [{"name": r[0], "email": r[1], "date": r[2]} for r in rows]
+        stmt = select(Attendance).options(joinedload(Attendance.user)).where(
+            Attendance.date >= start_date,
+            Attendance.date <= end_date
+        ).order_by(Attendance.date.desc())
+
+        result = await get_db().execute(stmt)
+        records = result.scalars().all()
+
+        if not records:
+            raise HTTPException(status_code=404, detail="No attendance records found for the specified date range")
+        
+        return [
+            {
+                "name": record.user.name,
+                "email": record.user.email,
+                "date": record.date,
+                "session": record.session
+            } for record in records
+        ]
+    
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        conn.close()
-

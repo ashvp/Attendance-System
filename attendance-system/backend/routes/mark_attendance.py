@@ -1,8 +1,13 @@
-from fastapi import FastAPI, HTTPException, APIRouter, UploadFile, File
+from fastapi import FastAPI, HTTPException, APIRouter, UploadFile, File, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select, insert
+from pgvector.sqlalchemy import cosine_distance
 from datetime import datetime
 import numpy as np
 import cv2
-from ..database import get_connection
+from ..db.session import get_db
+from ..db.models.user import User
+from ..db.models.attendance import Attendance
 from ..embeddings.facenet_model import FaceEmbedder
 from ..embeddings.detector import FaceDetector
 
@@ -11,7 +16,7 @@ detector = FaceDetector()
 embedder = FaceEmbedder()
 
 @router.post("/mark_attendance")
-def mark_attendance(image: UploadFile = File(...)):
+async def mark_attendance(image: UploadFile = File(...)):
     contents = np.frombuffer(image.file.read(), np.uint8)
     img = cv2.imdecode(contents, cv2.IMREAD_COLOR)
     

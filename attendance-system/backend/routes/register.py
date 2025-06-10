@@ -1,8 +1,10 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, UploadFile, File, Form, Depends
 import numpy as np
 import cv2
-import psycopg2
-from ..database import get_connection
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from ..db.session import get_db
+from ..db.models.user import User
 from ..embeddings.facenet_model import FaceEmbedder
 from ..embeddings.detector import FaceDetector
 import csv
@@ -12,48 +14,46 @@ detector = FaceDetector()
 embedder = FaceEmbedder()
 
 @router.post("/api/register")
-def register_user(name: str = Form(...),
+async def register_user(name: str = Form(...),
                   email: str = Form(...),
-                  file: UploadFile = File(...)
+                  file: UploadFile = File(...),
+                  db: AsyncSession = Depends(get_db)
                   ):
-    contents = np.frombuffer(file.file.read(), np.uint8)
-    img = cv2.imdecode(contents, cv2.IMREAD_COLOR)
     
+    contents = await file.read()
+    img_array = np.frombuffer(contents, np.uint8)
+    img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+
     if img is None:
-        raise HTTPException(status_code=400, detail="Invalid image format")
-        
+        raise HTTPException(status_code=400, detail="Invalid image file")
+    
     face = detector.detect_and_crop(img)
     if face is None:
         raise HTTPException(status_code=400, detail="No face detected in the image")
-        
+    
     embedding = embedder.get_embedding(face)
-    
-    # Store embedding as a Python list
     embedding_vector = embedding.tolist()
-    
-    conn = get_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-        
     try:
-        cur = conn.cursor()
-        
-        # PostgreSQL will handle the conversion from Python list to vector format
-        cur.execute("INSERT INTO users (name, email, embedding) VALUES (%s, %s, %s)", 
-                   (name, email, embedding_vector))
-        
-        conn.commit()
-        return {"message": f"User {name} registered successfully."}
-        
+        async with db() as session:
+            result = await session.execute(select(User).where(User.email == email))
+            existing_user = result.scalars().first()
+            if existing_user:
+                raise HTTPException(status_code=400, detail="User with this email already exists")
+            
+            new_user = User(
+                name=name,
+                email=email,
+                embedding=embedding_vector
+            )
+            session.add(new_user)
+            await session.commit()
+            await session.refresh(new_user)
+            return {"message": "User registered successfully", "user_id": new_user.id}
     except Exception as e:
-        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        conn.close()
 
 @router.put("/api/register/csv")
-def register_users_from_csv(file: UploadFile = File(...)):
+async def register_users_from_csv(file: UploadFile = File(...)):
     if file.endswith(".csv") is False:
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload a CSV file.")
     
@@ -61,53 +61,46 @@ def register_users_from_csv(file: UploadFile = File(...)):
     decoded = content.decode("utf-8")
     reader = csv.DictReader(decoded.splitlines())
 
-    conn = get_connection()
-    if conn is None:
-        raise HTTPException(status_code=500, detail="Database connection failed")
-    
-    success = []
-    failed = []
-
     try:
-        cur = conn.cursor()
-        
         for row in reader:
             name = row.get("name")
             email = row.get("email")
             image_path = row.get("image_path")
-            
+
             if not name or not email or not image_path:
-                failed.append({"name": name, "email": email, "error": "Missing required fields"})
-                continue
-            
-            img = cv2.imread(image_path)
-            if img is None:
-                failed.append({"name": name, "email": email, "error": "Invalid image path"})
-                continue
-            
-            face = detector.detect_and_crop(img)
-            if face is None:
-                failed.append({"name": name, "email": email, "error": "No face detected in the image"})
-                continue
-            
-            embedding = embedder.get_embedding(face)
-            embedding_vector = embedding.tolist()
-            
-            try:
-                cur.execute("INSERT INTO users (name, email, embedding) VALUES (%s, %s, %s)", 
-                           (name, email, embedding_vector))
-                success.append({"name": name, "email": email})
-            except Exception as e:
-                failed.append({"name": name, "email": email, "error": str(e)})
-        
-        conn.commit()
-        return {"message":"CSV Upload Complete", "success": len(success), "failed": len(failed), "success_list": success, "failed_list": failed}
-    
+                raise HTTPException(status_code=400, detail="CSV must contain 'name', 'email', and 'image_path' columns")
+
+            # Read the image file
+            with open(image_path, "rb") as img_file:
+                contents = img_file.read()
+                img_array = np.frombuffer(contents, np.uint8)
+                img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
+
+                if img is None:
+                    raise HTTPException(status_code=400, detail=f"Invalid image file for {name}")
+
+                face = detector.detect_and_crop(img)
+                if face is None:
+                    raise HTTPException(status_code=400, detail=f"No face detected in the image for {name}")
+
+                embedding = embedder.get_embedding(face)
+                embedding_vector = embedding.tolist()
+
+                async with get_db() as session:
+                    result = await session.execute(select(User).where(User.email == email))
+                    existing_user = result.scalars().first()
+                    if existing_user:
+                        raise HTTPException(status_code=400, detail=f"User with email {email} already exists")
+
+                    new_user = User(
+                        name=name,
+                        email=email,
+                        embedding=embedding_vector
+                    )
+                    session.add(new_user)
+                    await session.commit()
+                    await session.refresh(new_user)
+                    print(f"User {name} registered successfully with ID {new_user.id}")
     except Exception as e:
-        conn.rollback()
         raise HTTPException(status_code=500, detail=str(e))
-    
-    finally:
-        cur.close()
-        conn.close()
 

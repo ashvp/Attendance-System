@@ -55,7 +55,7 @@ async def get_attendance_by_user(user_id: int, db: AsyncSession = Depends(get_db
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/api/attendance/filter")
-async def filter_attendance(start_date: str, end_date: str):
+async def filter_attendance(start_date: str, end_date: str, db: AsyncSession = Depends(get_db)):
     try:
         stmt = select(Attendance).options(joinedload(Attendance.user)).where(
             Attendance.date >= start_date,

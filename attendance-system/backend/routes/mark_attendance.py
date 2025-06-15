@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, APIRouter, UploadFile, File, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.future import select, insert
-from pgvector.sqlalchemy import cosine_distance
+from sqlalchemy import select, insert, literal
+# from pgvector.sqlalchemy import cosine_distance
 from datetime import datetime
 import numpy as np
 import cv2
@@ -26,9 +26,12 @@ async def mark_attendance(image: UploadFile = File(...), db: AsyncSession = Depe
     
     embedding = embedder.get_embedding(face)
     
-    stmt = select(User, cosine_distance(User.embedding, embedding).label("similarity")).order_by("similarity").limit(1)
-
-    result = await get_db().execute(stmt)
+    stmt = (
+    select(User, (User.embedding.op("<=>")(literal(embedding))).label("similarity"))
+    .order_by("similarity")
+    .limit(1)
+)
+    result = await db.execute(stmt)
     match = result.first()
 
     if not match or match.similarity > 0.5:
@@ -40,14 +43,14 @@ async def mark_attendance(image: UploadFile = File(...), db: AsyncSession = Depe
     session = "Morning" if now.hour < 12 else "Evening"
 
     stmt = insert(Attendance).values(
-        user=user.id,
+        user_id=user.id,
         date = now.date(),
         session=session,
         status="Present"
     )
 
-    await get_db().execute(stmt)
-    await get_db().commit()
+    await db.execute(stmt)
+    await db.commit()
 
     return {"message": f"Attendance marked for {user.name} ({user.email}) on {now.date()} during {session} session."}
 

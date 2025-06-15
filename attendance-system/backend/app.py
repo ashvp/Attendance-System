@@ -1,10 +1,19 @@
+import os
+from dotenv import load_dotenv
+from pathlib import Path
+
+# Load .env early
+load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
+
+import backend.firebase_auth
+
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from .models import create_table
-from .database import get_connection
+from .db.session import get_db
+# from .database import get_connection
 from datetime import datetime
 from psycopg2 import sql
-from .routes import mark_attendance, register, users, attendance
+from .routes import mark_attendance, register, users, attendance, auth
 
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
@@ -30,10 +39,11 @@ app.include_router(mark_attendance.router)
 app.include_router(register.router)
 app.include_router(users.router)
 app.include_router(attendance.router)
+app.include_router(auth.router)
 
 @app.on_event("startup")
 def startup_event():
-    create_table()
+    get_db()
     print("Database tables ready.")
 
 @app.get("/")

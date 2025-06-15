@@ -17,7 +17,7 @@ router = APIRouter()
 async def export_attendance(db: AsyncSession = Depends(get_db)):
     try:
         stmt = select(Attendance).options(joinedload(Attendance.user)).order_by(Attendance.date.desc())
-        result = await get_db().execute(stmt)
+        result = await db.execute(stmt)
         rows = result.scalars().all()
 
         if not rows:
@@ -44,7 +44,7 @@ async def export_attendance(db: AsyncSession = Depends(get_db)):
 async def get_attendance_by_user(user_id: int, db: AsyncSession = Depends(get_db)):
     try:
         stmt = select(Attendance).where(Attendance.user_id == user_id).order_by(Attendance.date.desc())
-        result = await get_db().execute(stmt)
+        result = await db.execute(stmt)
         records = result.scalars().all()
         if not records:
             raise HTTPException(status_code=404, detail="No attendance records found for this user")
@@ -62,7 +62,7 @@ async def filter_attendance(start_date: str, end_date: str, db: AsyncSession = D
             Attendance.date <= end_date
         ).order_by(Attendance.date.desc())
 
-        result = await get_db().execute(stmt)
+        result = db.execute(stmt)
         records = result.scalars().all()
 
         if not records:

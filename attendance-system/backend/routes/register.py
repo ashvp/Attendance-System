@@ -19,6 +19,7 @@ async def register_user(name: str = Form(...),
                   file: UploadFile = File(...),
                   db: AsyncSession = Depends(get_db)
                   ):
+    print("DB TYPE:", type(db))
     
     contents = await file.read()
     img_array = np.frombuffer(contents, np.uint8)
@@ -33,27 +34,28 @@ async def register_user(name: str = Form(...),
     
     embedding = embedder.get_embedding(face)
     embedding_vector = embedding.tolist()
+
     try:
-        async with db() as session:
-            result = await session.execute(select(User).where(User.email == email))
-            existing_user = result.scalars().first()
-            if existing_user:
-                raise HTTPException(status_code=400, detail="User with this email already exists")
-            
-            new_user = User(
-                name=name,
-                email=email,
-                embedding=embedding_vector
-            )
-            session.add(new_user)
-            await session.commit()
-            await session.refresh(new_user)
-            return {"message": "User registered successfully", "user_id": new_user.id}
+        
+        result = await db.execute(select(User).where(User.email == email))
+        existing_user = result.scalars().first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="User with this email already exists")
+        
+        new_user = User(
+            name=name,
+            email=email,
+            embedding=embedding_vector
+        )
+        db.add(new_user)
+        await db.commit()
+        await db.refresh(new_user)
+        return {"message": "User registered successfully", "user_id": new_user.id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/api/register/csv")
-async def register_users_from_csv(file: UploadFile = File(...)):
+async def register_users_from_csv(file: UploadFile = File(...), db: AsyncSession = Depends(get_db)):
     if file.endswith(".csv") is False:
         raise HTTPException(status_code=400, detail="Invalid file format. Please upload a CSV file.")
     
@@ -86,21 +88,19 @@ async def register_users_from_csv(file: UploadFile = File(...)):
                 embedding = embedder.get_embedding(face)
                 embedding_vector = embedding.tolist()
 
-                async with get_db() as session:
-                    result = await session.execute(select(User).where(User.email == email))
-                    existing_user = result.scalars().first()
-                    if existing_user:
-                        raise HTTPException(status_code=400, detail=f"User with email {email} already exists")
-
-                    new_user = User(
-                        name=name,
-                        email=email,
-                        embedding=embedding_vector
-                    )
-                    session.add(new_user)
-                    await session.commit()
-                    await session.refresh(new_user)
-                    print(f"User {name} registered successfully with ID {new_user.id}")
+                result = await db.execute(select(User).where(User.email == email))
+                existing_user = result.scalars().first()
+                if existing_user:
+                    raise HTTPException(status_code=400, detail=f"User with email {email} already exists")
+                new_user = User(
+                    name=name,
+                    email=email,
+                    embedding=embedding_vector
+                )
+                db.add(new_user)
+                await db.commit()
+                await db.refresh(new_user)
+                print(f"User {name} registered successfully with ID {new_user.id}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

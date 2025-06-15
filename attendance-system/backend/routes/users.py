@@ -1,74 +1,70 @@
-from fastapi import APIRouter, HTTPException
-from ..database import get_connection
+from fastapi import APIRouter, HTTPException, Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, delete
+from ..db.models.user import User
+from ..db.session import get_db
+
 router = APIRouter()
 
 @router.get("/api/users")
-def get_users():
+async def get_users(db: AsyncSession = Depends(get_db)):
     try:
-        conn = get_connection()
-        if conn is None:
-            raise HTTPException(status_code=500, detail="Database connection failed")
+        result = await db.execute(select(User).order_by(User.id))
+        users = result.scalars().all()
 
-        cur = conn.cursor()
-        cur.execute("SELECT id, name, email FROM users ORDER BY id")
-        users = cur.fetchall()
-
-        user_list = [{"id": user[0], "name": user[1], "email": user[2]} for user in users]
+        user_list = [
+            {
+                "id": user.id,
+                "name": user.name,
+                "account_id": user.account_id,
+                "role": user.role.value,
+                "is_admin": user.is_admin,
+            }
+            for user in users
+        ]
 
         return {"users": user_list}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        if conn:
-            conn.close()
+
 
 @router.delete("/api/users/{user_id}")
-def delete_user(user_id: int):
+async def delete_user(user_id: int, db: AsyncSession = Depends(get_db)):
     try:
-        conn = get_connection()
-        if conn is None:
-            raise HTTPException(status_code=500, detail="Database connection failed")
-
-        cur = conn.cursor()
-        cur.execute("DELETE FROM users WHERE id = %s RETURNING id", (user_id,))
-        deleted_user = cur.fetchone()
-
-        if deleted_user is None:
-            raise HTTPException(status_code=404, detail="User not found")
-
-        conn.commit()
-        return {"message": f"User with ID {deleted_user} deleted successfully"}
-
-    except Exception as e:
-        conn.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        if conn:
-            conn.close()
-
-@router.get("/api/users/{user_id}")
-def get_user(user_id: int):
-    try:
-        conn = get_connection()
-        if conn is None:
-            raise HTTPException(status_code=500, detail="Database connection failed")
-
-        cur = conn.cursor()
-        cur.execute("SELECT id, name, email FROM users WHERE id = %s", (user_id,))
-        user = cur.fetchone()
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalars().first()
 
         if user is None:
             raise HTTPException(status_code=404, detail="User not found")
 
-        user_data = {"id": user[0], "name": user[1], "email": user[2]}
+        await db.delete(user)
+        await db.commit()
+
+        return {"message": f"User with ID {user.id} deleted successfully"}
+
+    except Exception as e:
+        await db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/api/users/{user_id}")
+async def get_user(user_id: int, db: AsyncSession = Depends(get_db)):
+    try:
+        result = await db.execute(select(User).where(User.id == user_id))
+        user = result.scalars().first()
+
+        if user is None:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        user_data = {
+            "id": user.id,
+            "name": user.name,
+            "account_id": user.account_id,
+            "role": user.role.value,
+            "is_admin": user.is_admin,
+        }
+
         return {"user": user_data}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        cur.close()
-        if conn:
-            conn.close()

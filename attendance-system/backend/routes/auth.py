@@ -1,6 +1,6 @@
 # backend/routes/auth.py
 from fastapi import APIRouter, Request, Header, HTTPException
-from backend.firebase_auth import verify_firebase_token
+from firebase_auth import verify_firebase_token
 
 router = APIRouter()
 

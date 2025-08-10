@@ -2,8 +2,8 @@ from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Enum
 from pgvector.sqlalchemy import Vector
 from sqlalchemy.orm import relationship
 
-from backend.db.base import Base
-from backend.db.enum import UserRole
+from db.base import Base
+from db.enum import UserRole
 
 class User(Base):
     __tablename__ = "users"

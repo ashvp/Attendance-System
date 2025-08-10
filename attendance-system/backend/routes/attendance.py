@@ -3,9 +3,9 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
-from ..db.session import get_db
-from ..db.models.user import User
-from ..db.models.attendance import Attendance
+from db.session import get_db
+from db.models.user import User
+from db.models.attendance import Attendance
 
 import io
 import csv

@@ -5,18 +5,41 @@ from pathlib import Path
 # Load .env early
 load_dotenv(dotenv_path=Path(__file__).resolve().parent / ".env")
 
-import backend.firebase_auth
+import firebase_auth
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from .db.session import get_db
+from db.session import get_db
+from db.table_manager import create_tables_if_not_exist
+from contextlib import asynccontextmanager
 # from .database import get_connection
 from datetime import datetime
 from psycopg2 import sql
-from .routes import mark_attendance, register, users, attendance, auth
+from routes import mark_attendance, register, users, attendance, auth
+import logging
 
-import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "-1"
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Handle FastAPI startup and shutdown events."""
+    # Startup
+    logger.info("🚀 Starting Attendance System API...")
+    
+    # Create tables if they don't exist
+    db_success = await create_tables_if_not_exist()
+    
+    if not db_success:
+        logger.error("❌ Failed to create database tables")
+        # Don't exit, just log the error - app can still run if tables exist
+    
+    logger.info("✅ Application startup complete!")
+    
+    yield
+    
+    # Shutdown
+    logger.info("👋 Shutting down...")
 
 
 app = FastAPI()

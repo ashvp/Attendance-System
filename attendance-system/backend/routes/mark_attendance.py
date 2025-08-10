@@ -5,11 +5,11 @@ from sqlalchemy import select, insert, literal
 from datetime import datetime
 import numpy as np
 import cv2
-from ..db.session import get_db
-from ..db.models.user import User
-from ..db.models.attendance import Attendance
-from ..embeddings.facenet_model import FaceEmbedder
-from ..embeddings.detector import FaceDetector
+from db.session import get_db
+from db.models.user import User
+from db.models.attendance import Attendance
+from embeddings.facenet_model import FaceEmbedder
+from embeddings.detector import FaceDetector
 
 router = APIRouter()
 detector = FaceDetector()

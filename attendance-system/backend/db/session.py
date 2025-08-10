@@ -17,3 +17,8 @@ AsyncSessionLocal = sessionmaker(bind=engine, class_=AsyncSession, expire_on_com
 async def get_db():
     async with AsyncSessionLocal() as session:
         yield session
+
+@asynccontextmanager
+async def get_db_context():
+    async with AsyncSessionLocal() as session:
+        yield session
